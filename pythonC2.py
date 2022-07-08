@@ -343,7 +343,7 @@ class C2Operator:
         request["action"] = "query_tasking"
         request["endpoint_id"] = self.active_client
         print(f"querying tasks for endpoint: {self.active_client}")
-        client_tasking = self.c2_server_transaction(server_message = request)
+        client_tasking = self.c2_server_transaction(server_message = request)["response"]
         
         print(f"Tasking for endpoint {self.active_client}:\n")
         for task in client_tasking:
