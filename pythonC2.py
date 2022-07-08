@@ -346,6 +346,7 @@ class C2Operator:
         client_tasking = self.c2_server_transaction(server_message = request)["response"]
         
         print(f"Tasking for endpoint {self.active_client}:\n")
+        print("row id\t\tendpoint_id\t\ttask_id\t\tcommand\t\tresults\t\tcreated\t\tupdated")
         for task in client_tasking:
             print(f"{task}\n")
     
