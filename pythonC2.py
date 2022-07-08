@@ -117,7 +117,7 @@ class C2Client:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
             received_data = b""
             sock.connect((self.dest_ip,self.dest_port))    
-            sock.sendall(server_message)
+            sock.sendall(server_message.encode())
             data = sock.recv(1024)
             while data:
                 received_data += data
@@ -362,7 +362,7 @@ class C2Operator:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
             received_data = b""
             sock.connect((self.server,self.port))    
-            sock.sendall(server_message)
+            sock.sendall(server_message.encode())
             data = sock.recv(1024)
             while data:
                 received_data += data
@@ -443,7 +443,7 @@ class C2Server:
                 inbound_data += data_buffer
             else:
                 # process what we read and prepare response
-                inbound_message = json.loads(inbound_data)
+                inbound_message = json.loads(inbound_data.decode())
                 response = self.process_tasking(inbound_message).encode()
                 sock.send(response)
         
@@ -532,7 +532,6 @@ def main():
 
     if args.debug:
         logger.setLevel(logging.DEBUG)
-    logger.info("test")
     
     logger.debug(args)
 
