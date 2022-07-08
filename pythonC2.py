@@ -449,7 +449,7 @@ class C2Server:
         
                 
 
-    def set_up_listener(host: ip_address, port: int) -> socket.socket:
+    def set_up_listener(self, host: ip_address, port: int) -> socket.socket:
         # bind sockets for listeners (either operator or callback)
         # return socket object
         sel = selectors.DefaultSelector()
@@ -532,7 +532,11 @@ def main():
 
     if args.debug:
         logger.setLevel(logging.DEBUG)
+    logger.info("test")
+    
+    logger.debug(args)
 
+    logger.info(args)
     if args.mode == 'server':
         server = C2Server(
             c2_method=None,
