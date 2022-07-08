@@ -106,7 +106,7 @@ class C2Client:
         self.c2_method = c2_method
         self.endpoint_id = endpoint_id
         self.sleep = sleep,
-        self.src_ip = src_ip,
+        self.src_ip = src_ip.split("'")[1],
         self.hostname = hostname,
         self.tasking_queue = []
 
