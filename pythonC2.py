@@ -229,14 +229,14 @@ class C2Database:
         # returns list of tasking rows
         if filter.get("id", False):
             query = '''SELECT * FROM tasking WHERE uuid = ?'''
-            data = (filter["id"])
+            data = (filter["id"],)
         elif filter.get("new_tasks", False):
             query = '''SELECT uuid, task FROM tasking WHERE endpoint = ? and results IS NULL'''
             data = (str(endpoint),)
             logger.debug(str(endpoint))
         else:
             query = '''SELECT * FROM tasking WHERE endpoint = ?'''
-            data = (str(endpoint))
+            data = (str(endpoint),)
         self.db_cursor.execute(query, data)
         return(self.db_cursor.fetchall())
 
@@ -301,7 +301,7 @@ class C2Operator:
             elif action == 2:
                 self.select_client()
             elif action == 3:
-                self.query_client_tasking
+                self.query_client_tasking()
                 pause_for_any_key()
             elif action == 4:
                 self.submit_tasking()
