@@ -167,6 +167,8 @@ class C2Client:
         # loop through callback -> sleep cycle
         shutdown = False
 
+        logger.debug(self.src_ip)
+
         while not shutdown:
             if not self.endpoint_id:
                 self.register_endpoint()
