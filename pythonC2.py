@@ -131,6 +131,7 @@ class C2Client:
         request["type"] = "client"
         request["action"] = "register_endpoint"
         request["info"] = {"ip":str(self.src_ip), "hostname": self.hostname}
+        logger.debug(f"ip looks like this before going into json: {self.src_ip} then str formatted: {str(self.src_ip)}")
         logger.debug(f"request info addr looks like this: {request['info']}")
         logger.debug(f"request ip addr looks like this: {request['info']['ip']}")
         logger.debug(f"type: {type(request['info']['ip'])}")
