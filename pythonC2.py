@@ -356,8 +356,8 @@ class C2Operator:
         request["action"] = "put_tasking"
         request["endpoint_id"] = self.active_client
         request["tasking"] = []
-        request["tasking"].append(input("Enter tasking line:"))
-        task_id = self.c2_server_transaction(server_message = request)
+        request["tasking"].append(input("Enter tasking line:  "))
+        task_id = self.c2_server_transaction(server_message = request)["response"]["task_id"]
         print(f"Task id: {task_id}")
 
 
