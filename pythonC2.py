@@ -177,6 +177,7 @@ class C2Client:
         while not shutdown:
             if not self.endpoint_id:
                 self.register_endpoint()
+            logger.debug(f"tasking queue: {self.tasking_queue}")
             for index, row in enumerate(self.tasking_queue):
                 logger.debug(f"tasking: {row}")
                 task = row[1]
