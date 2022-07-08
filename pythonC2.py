@@ -126,6 +126,7 @@ class C2Client:
                 data = sock.recv(1024)
                 logger.debug(data)
         response_decoded = json.loads(received_data.decode())
+        logger.debug(f"Closing connection to {self.dest_ip}:{self.dest_port}")
         return response_decoded
     
     def register_endpoint(self):
