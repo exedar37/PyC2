@@ -440,7 +440,7 @@ class C2Server:
             # read until we get everything
             data_buffer = sock.recv(1024)
             if data_buffer:
-                inbound_data += data_buffer
+                inbound_data += data_buffer.decode()
             else:
                 # process what we read and prepare response
                 inbound_message = json.loads(inbound_data.decode())
