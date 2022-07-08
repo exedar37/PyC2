@@ -148,7 +148,9 @@ class C2Client:
         request["action"] = "get_tasks"
         request["endpoint_id"] = self.endpoint_id
         new_tasks = self.c2_server_transaction(server_message=request)
-        self.tasking_queue = [new_tasks["response"][0]]
+        if len(new_tasks) > 0:
+            self.tasking_queue = [new_tasks["response"][0]]
+        else: self.tasking_queue = []
 
     
     def update_tasking(self):
@@ -519,9 +521,10 @@ class C2Server:
             response["action"] = "list_tasking_response"
             response["response"] = self.db_conn.query_tasking(endpoint=endpoint_id)
         elif message_type == "operator" and action == "query_tasking":
-            task_id = message["tasking"]["task_id"]
+            # task_id = message["tasking"]["task_id"]
             response["action"] = "query_tasking_response"
-            response["response"] = self.db_conn.query_tasking(endpoint=endpoint_id, filter={"id":task_id})
+            #response["response"] = self.db_conn.query_tasking(endpoint=endpoint_id, filter={"id":task_id})
+            response["response"] = self.db_conn.query_tasking(endpoint=endpoint_id)
         elif message_type == "operator" and action == "list_clients":
             response["action"] = "list_clients_response"
             response["response"] = self.db_conn.list_endpoints()
