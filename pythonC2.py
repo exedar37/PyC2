@@ -571,6 +571,7 @@ def main():
         server.run()
     elif args.mode == 'client':
         client = C2Client(
+            src_ip=get_ip_addr(),
             dest_ip=args.server_ip,
             dest_port=args.callback_port,
             c2_method=None,
