@@ -539,6 +539,7 @@ def main():
             operator_port=args.operator_port,
             callback_port=args.callback_port,
             operator_listen_ip=args.server_ip,
+            callback_listen_ip=args.server_ip,
             tasking_log=args.log_file,
             client_db_path=args.db_file,
             )
