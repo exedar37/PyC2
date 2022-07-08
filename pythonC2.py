@@ -519,7 +519,7 @@ def main():
     #parse cmdline arguments
     parser = argparse.ArgumentParser(
         description='C2 script, runs as either client, server, or operator')
-    parser.add_argument('--debug', dest='debug_mode',
+    parser.add_argument('--debug', dest='debug',
                               default=False, action='store_true',
                               help='enable debug mode')
     parser.add_argument('--mode', type=str, dest='mode',  default=False, choices=("server", "client", "operator"))
