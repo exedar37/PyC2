@@ -178,6 +178,7 @@ class C2Client:
             if not self.endpoint_id:
                 self.register_endpoint()
             for index, row in enumerate(self.tasking_queue):
+                logger.debug(f"tasking: {row}")
                 task = row[1]
                 task_id = row[0]
                 results = self.process_tasking(task)
