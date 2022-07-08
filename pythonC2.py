@@ -117,7 +117,7 @@ class C2Client:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
             received_data = b""
             sock.connect((self.dest_ip,self.dest_port))    
-            sock.sendall(server_message.encode())
+            sock.sendall(json.dumps(server_message).encode())
             data = sock.recv(1024)
             while data:
                 received_data += data
@@ -362,7 +362,7 @@ class C2Operator:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
             received_data = b""
             sock.connect((self.server,self.port))    
-            sock.sendall(server_message.encode())
+            sock.sendall(json.dumps(server_message).encode())
             data = sock.recv(1024)
             while data:
                 received_data += data
@@ -415,7 +415,7 @@ class C2Server:
             sel.close()
 
 
-    def accept_wrapper(sock: socket, sel: selectors.DefaultSelector):
+    def accept_wrapper(self, sock: socket, sel: selectors.DefaultSelector):
         # accept the inbound connection
         conn, addr = sock.accept()
         logger.info(f"Received connection from {addr}")
