@@ -131,7 +131,8 @@ class C2Client:
         request["type"] = "client"
         request["action"] = "register_endpoint"
         request["info"] = {"ip":str(self.src_ip), "hostname": self.hostname}
-        logger.debug(request)
+        logger.debug(f"request info addr looks like this: {request['info']}")
+        logger.debug(f"request ip addr looks like this: {request['info']['ip']}")
         self.endpoint_id = self.c2_server_transaction(server_message=request)
         logger.info(f"registered as {self.endpoint_id}")
 
@@ -512,7 +513,6 @@ class C2Server:
             src_ip = message["info"]["ip"]
             hostname = message["info"]["hostname"]
             response["action"] = "register_endpoint_response"
-            logger.debug(f"{src_ip[0]}")
             response["response"]["endpoint_id"] =  self.db_conn.register_endpoint(hostname=hostname, last_ip=src_ip)
             logger.debug(f"registered endpoint IP: {src_ip}")
         elif message_type == "client" and action == "get_tasks":
