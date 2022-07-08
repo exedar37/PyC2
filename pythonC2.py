@@ -88,7 +88,7 @@ def pause_for_any_key():
     _ = input("Press any key to continue")
 
 def get_ip_addr():
-    return ip_address(socket.gethostbyname(socket.gethostname()))
+    return socket.gethostbyname(socket.gethostname())
 
 
 class C2Client:
@@ -443,7 +443,7 @@ class C2Server:
                 inbound_data += data_buffer.decode()
             else:
                 # process what we read and prepare response
-                inbound_message = json.loads(inbound_data.decode())
+                inbound_message = json.loads(inbound_data)
                 response = self.process_tasking(inbound_message).encode()
                 sock.send(response)
         
