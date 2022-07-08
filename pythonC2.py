@@ -237,8 +237,8 @@ class C2Database:
     def register_endpoint(self, hostname: str, last_ip: str) -> str:
         # add new endpoint, give it a UUID, add to endpoints table
         # returns UUID (uuid.uuid4())
-        new_uuid = uuid.uuid4()
-        first_callback = datetime.datetime.now().isoformat()
+        new_uuid = str(uuid.uuid4())
+        first_callback = int(datetime.datetime.now().isoformat())
         last_callback = first_callback
         query = '''INSERT INTO endpoints(uuid,hostname,first_callback,last_callback,last_ip) Values(?,?,?,?,?)'''
         data = (new_uuid, hostname, first_callback, last_callback, last_ip)
